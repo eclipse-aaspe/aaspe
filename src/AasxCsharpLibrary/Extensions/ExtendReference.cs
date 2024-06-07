@@ -23,7 +23,12 @@ namespace Extensions
 
         public static bool IsValid(this IReference reference)
         {
-            return reference.Keys != null && !reference.Keys.IsEmpty();
+            if (reference?.Keys == null || reference.Keys.Count < 1)
+                return false;
+            foreach (var k in reference.Keys)
+                if (k.Value == null || k.Value.Trim().Length < 1)
+                    return false;
+            return true;
         }
 
         public static bool IsValid(this List<IReference> references)
@@ -82,6 +87,12 @@ namespace Extensions
             return res;
         }
 
+        public static Reference CreateFromString(string id, KeyTypes keyType = KeyTypes.GlobalReference)
+        {
+            var k = new Key(keyType, id);
+            return new Reference(ReferenceTypes.ExternalReference, new List<IKey>(new IKey[] { k }));
+        }
+
         // TODO (Jui, 2023-01-05): Check why the generic Copy<T> does not apply here?!
         public static Reference Copy(this Reference original)
         {
@@ -126,7 +137,7 @@ namespace Extensions
             }
 
             return false;
-        }
+        }        
 
         #endregion
 
@@ -180,6 +191,9 @@ namespace Extensions
             return match;
         }
 
+        /// <summary>
+        /// Useful, if the searched reference will have only one key (e.g. ECLASS properties)
+        /// </summary>
         public static bool MatchesExactlyOneKey(this IReference reference, IKey key, MatchMode matchMode = MatchMode.Strict)
         {
             if (key == null || reference.Keys == null || reference.Keys.Count != 1)
@@ -234,7 +248,7 @@ namespace Extensions
 
         public static Key GetAsExactlyOneKey(this IReference reference)
         {
-            if (reference.Keys == null || reference.Keys.Count != 1)
+            if (reference?.Keys == null || reference.Keys.Count != 1)
             {
                 return null;
             }

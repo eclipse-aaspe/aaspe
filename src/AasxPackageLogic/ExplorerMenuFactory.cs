@@ -12,6 +12,7 @@ This source code may use other Open Source software components (see LICENSE.txt)
 
 using AasxIntegrationBase;
 using AasxPackageLogic;
+using AdminShellNS;
 using Extensions;
 
 namespace AasxPackageExplorer
@@ -125,7 +126,11 @@ namespace AasxPackageExplorer
                             .Add("Asset", "String with Asset-Id.")))
                 .AddSeparator()
                 .AddMenu(header: "Import …", attachPoint: "import", childs: (new AasxMenu())
-                    .AddWpfBlazor(name: "ImportAML", header: "Import AutomationML into AASX …",
+					.AddWpfBlazor(name: "ImportAASX", header: "Import further AASX file into AASX …",
+						help: "Import AASX file(s) with entities to overall AAS environment.",
+						args: new AasxMenuListOfArgDefs()
+							.Add("Files", "One or multiple AASX file(s) with AAS entities data."))
+					.AddWpfBlazor(name: "ImportAML", header: "Import AutomationML into AASX …",
                         help: "Import AML file with AAS entities to overall AAS environment.",
                         args: new AasxMenuListOfArgDefs()
                             .Add("File", "AML file with AAS entities data."))
@@ -149,7 +154,11 @@ namespace AasxPackageExplorer
                         help: "Import Thing Description (TD) file in JSON LD format into an existing Submodel.",
                         args: new AasxMenuListOfArgDefs()
                             .Add("File", "JSON LD file with TD data."))
-                    .AddWpfBlazor(name: "CSVImport", header: "Import CSV-file into SubModel …",
+					.AddWpfBlazor(name: "SammAspectImport", header: "Import SAMM aspect into ConceptDescriptions …",
+						help: "Import SAMM (Semantic Aspect Meta Model) aspect data into dedicated ConceptDescriptions.",
+						args: new AasxMenuListOfArgDefs()
+							.Add("File", "SAMM file (*.ttl, ..) with aspect model."))
+					.AddWpfBlazor(name: "CSVImport", header: "Import CSV-file into SubModel …",
                         help: "Import comma separated values (CSV) into an existing Submodel.",
                         args: new AasxMenuListOfArgDefs()
                             .Add("File", "CSV file with data."))
@@ -212,14 +221,19 @@ namespace AasxPackageExplorer
                     .AddWpfBlazor(name: "ExportPredefineConcepts",
                         header: "Export Submodel as snippet for PredefinedConcepts …",
                         args: new AasxMenuListOfArgDefs()
-                            .Add("File", "OPC UA Nodeset2.xml file to write.")
+                            .Add("File", "Text file to write.")
                             .Add("Location", "Location selection", hidden: true))
                     .AddWpfBlazor(name: "SubmodelTDExport", header: "Export Submodel as Thing Description JSON LD document",
                         help: "Export Thing Description (TD) file in JSON LD format from an existing Submodel.",
                         args: new AasxMenuListOfArgDefs()
                             .Add("File", "JSON LD file with TD data.")
                             .Add("Location", "Location selection", hidden: true))
-                    .AddWpfBlazor(name: "PrintAsset", header: "Print Asset as code sheet …",
+					.AddWpfBlazor(name: "SammAspectExport", header: "Export SAMM aspect model by selected CD",
+						help: "Export SAMM aspect model in Turtle (.ttl) format from an selected ConceptDescription.",
+						args: new AasxMenuListOfArgDefs()
+							.Add("File", "Turtle file with SAMM data.")
+							.Add("Location", "Location selection", hidden: true))
+					.AddWpfBlazor(name: "PrintAsset", header: "Print Asset as code sheet …",
                         help: "Prints a sheet with 2D codes for the selected asset.")
                     .AddWpfBlazor(name: "ExportSMD", header: "Export TeDZ Simulation Model Description (SMD) …",
                         help: "Export TeDZ Simulation Model Description (SMD).",
@@ -271,11 +285,11 @@ namespace AasxPackageExplorer
                     args: new AasxMenuListOfArgDefs()
                         .AddFromReflection(new AasxSearchUtil.SearchOptions())
                         .Add("Do", "Either do 'stay', 'forward' or 'all'."))
-                .AddWpf(name: "ToolsFindForward", header: "Find Forward", inputGesture: "F3", isHidden: true)
-                .AddWpf(name: "ToolsFindBackward", header: "Find Backward", inputGesture: "Shift+F3", isHidden: true)
-                .AddWpf(name: "ToolsReplaceStay", header: "Replace and stay", isHidden: true)
-                .AddWpf(name: "ToolsReplaceForward", header: "Replace and stay", isHidden: true)
-                .AddWpf(name: "ToolsReplaceAll", header: "Replace all", isHidden: true)
+                .AddWpf(name: "ToolsFindForward", header: "Find Forward", inputGesture: "F3", hidden: true)
+                .AddWpf(name: "ToolsFindBackward", header: "Find Backward", inputGesture: "Shift+F3", hidden: true)
+                .AddWpf(name: "ToolsReplaceStay", header: "Replace and stay", hidden: true)
+                .AddWpf(name: "ToolsReplaceForward", header: "Replace and stay", hidden: true)
+                .AddWpf(name: "ToolsReplaceAll", header: "Replace all", hidden: true)
                 .AddSeparator()
                 .AddMenu(header: "Navigation …", childs: (new AasxMenu())
                     .AddWpfBlazor(name: "NavigateBack", header: "Back", inputGesture: "Ctrl+Shift+Left")
@@ -285,7 +299,7 @@ namespace AasxPackageExplorer
                     .AddWpfBlazor(name: "LocationPush", header: "Push location", inputGesture: "Ctrl+Shift+P")
                     .AddWpfBlazor(name: "LocationPop", header: "Pop location", inputGesture: "Ctrl+Shift+O"))
                 .AddSeparator()
-                .AddMenu(header: "Create …", attachPoint: "Plugins", childs: (new AasxMenu())
+                .AddMenu(header: "Create …", attachPoint: "Create", childs: (new AasxMenu())
                     .AddWpfBlazor(name: "NewSubmodelFromPlugin", header: "New Submodel from plugin", inputGesture: "Ctrl+Shift+M",
                             help: "Creates a new Submodel based on defintions provided by plugin.",
                             args: new AasxMenuListOfArgDefs()
@@ -297,12 +311,25 @@ namespace AasxPackageExplorer
                             args: new AasxMenuListOfArgDefs()
                                 .Add("Domain", "Domain of knowledge/ name of the Submodel (partially)")
                                 .Add("SmRef", "Return: Submodel generated", hidden: true))
-                    .AddWpfBlazor(name: "MissingCdsFromKnown", header: "Missing ConceptDescriptions from pool of known",
-                            help: "For the selected element: checks which SME refer to missing " +
-                                  "ConceptDescriptions, which can be created from pool of known definitions."))
+					.AddWpfBlazor(name: "MissingCdsFromKnown", header: "Missing ConceptDescriptions from pool of known",
+							help: "For the selected element: checks which SME refer to missing " +
+                                  "ConceptDescriptions, which can be created from pool of known definitions.")
+                    .AddSeparator()
+                    .AddWpfBlazor(name: "SmtExtensionFromQualifiers", header: "SMT extensions from single SMT qualifiers",
+                            help: "Converts particular SMT qualifiers to SMT extension for selected element.")
+                    .AddWpfBlazor(name: "SmtOrganizesFromSubmodel", header: "SMT organizes from Submodel",
+                            help: "Take over Submodel's element relationships to associated concepts.")
+                    .AddWpfBlazor(name: "SubmodelInstanceFromSammAspect", 
+                        header: "New Submodel instance from selected SAMM aspect",
+						help: "Creates a new Submodel instance from an selected ConceptDescription with a SAMM Aspect element.")
+                    .AddWpfBlazor(name: "SubmodelInstanceFromSmtConcepts",
+                        header: "New Submodel from SMT/ SAMM ConceptDescription",
+                        help: "Creates a new Submodel instance from an selected root given by accessible ConceptDescriptions.")
+                    )
                 .AddMenu(header: "Visualize …", attachPoint: "Visualize")
+                .AddMenu(header: "Plugins …", attachPoint: "Plugins")
                 .AddSeparator()
-                .AddWpfBlazor(name: "ConvertElement", header: "Convert …",
+                .AddWpfBlazor(name: "ConvertElement", header: "Convert via plugin …",
                         help: "Asks plugins if these could make offers to convert the current elements and " +
                             "subsequently converts the element.",
                         args: new AasxMenuListOfArgDefs()
@@ -333,7 +360,8 @@ namespace AasxPackageExplorer
                 .AddWpfBlazor(name: "FileRepoLoadWoPrompt", header: "Load without prompt", isCheckable: true)
                 .AddWpfBlazor(name: "AnimateElements", header: "Animate elements", isCheckable: true)
                 .AddWpfBlazor(name: "ObserveEvents", header: "ObserveEvents", isCheckable: true)
-                .AddWpfBlazor(name: "CompressEvents", header: "Compress events", isCheckable: true));
+                .AddWpfBlazor(name: "CompressEvents", header: "Compress events", isCheckable: true)
+				.AddWpfBlazor(name: "CheckSmtElements", header: "Check SMT elements (slow!)", isCheckable: true));
 
             //
             // Help
@@ -358,6 +386,14 @@ namespace AasxPackageExplorer
 
             for (int i = 0; i < 9; i++)
                 menu.AddHotkey(name: $"LaunchScript{i}", gesture: $"Ctrl+Shift+{i}");
+
+            //
+            // invisible commands
+            //
+
+            menu.AddMenu(header: "", hidden: true,
+                childs: (new AasxMenu())
+                .AddWpfBlazor(name: "WinMaximize", header: "", hidden: true));
 
             //
             // Try attach plugins

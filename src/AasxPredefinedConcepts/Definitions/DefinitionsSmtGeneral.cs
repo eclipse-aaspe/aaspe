@@ -19,23 +19,30 @@ namespace AasxPredefinedConcepts
     /// The definitions aim as the definition and handling of Events.
     /// The should end up finally in a AASiD specification.
     /// </summary>
-    public class SmtAdditions : AasxDefinitionBase
+    public class SmtGeneral : AasxDefinitionBase
     {
-        public static SmtAdditions Static = new SmtAdditions();
+        public static SmtGeneral Static = new SmtGeneral();
 
         public Aas.ConceptDescription
-            CD_ContactInfoPreviewFile;
+            CD_IntentionallyEmpty,
+            CD_ArbitraryConcept;
 
-        public SmtAdditions()
+        public SmtGeneral()
         {
             // info
-            this.DomainInfo = "AASX PackageExplorer - Submodel templates - Additional (non standard) information";
+            this.DomainInfo = "AAS Submodel templates - General information";
 
             // definitons
-            CD_ContactInfoPreviewFile = CreateSparseConceptDescription("en", "IRI",
-                "ContactInfoPreviewFile",
-                "https://admin-shell.io/tmp/SMT/Additions/ContactInformation/PreviewFile",
-                @"Provides a preview image of the contact, e.g. an image of a person or a symbolic pictuture, in a commonly used image format and low resolution.");
+            CD_IntentionallyEmpty = CreateSparseConceptDescription("en", "IRI",
+                "IntentionallyEmpty",
+                "https://admin-shell.io/SMT/General/IntentionallyEmpty",
+                "Reference is intentionally empty, as filling out might occur later, upon " +
+                "availability of information.");
+
+            CD_ArbitraryConcept = CreateSparseConceptDescription("en", "IRI",
+				"Arbitrary",
+				"https://admin-shell.io/SMT/General/Arbitrary",
+				"Associated Submodel(Element) might refer to an arbitrary concept repository entry.");
 
             // reflect
             AddEntriesByReflection(this.GetType(), useAttributes: false, useFieldNames: true);

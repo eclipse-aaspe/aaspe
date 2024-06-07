@@ -13,13 +13,16 @@ using AasxIntegrationBase.AdminShellEvents;
 using AdminShellNS;
 using AnyUi;
 using Extensions;
+using Lucene.Net.Util;
 using Newtonsoft.Json;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.Intrinsics.X86;
 using Aas = AasCore.Aas3_0;
+using Samm = AasCore.Samm2_2_0;
 
 namespace AasxPackageLogic
 {
@@ -146,11 +149,27 @@ namespace AasxPackageLogic
         public void QualifierHelper(
             AnyUiStackPanel stack, ModifyRepo repo,
             List<Aas.IQualifier> qualifiers,
+            Action setQualifiersNull = null,
             Aas.IReferable relatedReferable = null,
             AasxMenu superMenu = null)
         {
+            // access
+            if (qualifiers == null)
+                return;
+
             if (editMode)
             {
+                // some hints
+                this.AddHintBubble(
+                stack, hintMode,
+                new[] {
+                    new HintCheck(
+                        () => qualifiers?.IsValid() != true,
+                        "According to the specification, an existing list of elements shall contain " +
+                        "at least one element and for each element all mandatory fields shall be " +
+                        "not empty.")
+                });
+
                 // let the user control the number of references
                 AddActionPanel(
                     stack, "Qualifier entities:",
@@ -183,7 +202,7 @@ namespace AasxPackageLogic
                                 if (presets == null)
                                 {
                                     Log.Singleton.Error(
-                                        $"JSON file for Quialifer presets not defined nor existing ({pfn}).");
+                                        $"JSON file for Qualifier presets not defined nor existing ({pfn}).");
                                     return new AnyUiLambdaActionNone();
                                 }
 
@@ -233,8 +252,13 @@ namespace AasxPackageLogic
                             }
                         }
 
-                        if (buttonNdx == 3 && qualifiers.Count > 0)
-                            qualifiers.RemoveAt(qualifiers.Count - 1);
+                        if (buttonNdx == 3)
+                        {
+                            if (qualifiers.Count > 0)
+                                qualifiers.RemoveAt(qualifiers.Count - 1);
+                            else
+                                setQualifiersNull?.Invoke();
+                        }
 
                         return new AnyUiLambdaActionRedrawEntity();
                     });
@@ -266,6 +290,11 @@ namespace AasxPackageLogic
                             {
                                 case 0:
                                     qualifiers.Remove(qual);
+                                    if (qualifiers.Count < 1)
+                                    {
+                                        qualifiers = null;
+                                        setQualifiersNull?.Invoke();
+                                    }
                                     action = true;
                                     break;
                                 case 1:
@@ -327,27 +356,19 @@ namespace AasxPackageLogic
 
                 // SemanticId
 
-                AddHintBubble(
-                    substack, hintMode,
-                    new[] {
-                        new HintCheck(
-                            () => {
-                                return (qual.SemanticId == null || qual.SemanticId.IsEmpty()) &&
-                                    (qual.Type == null || qual.Type.Trim() == "");
-                            },
-                            "Either a semanticId or a type string specification shall be given!")
-                    });
                 if (SafeguardAccess(
                         substack, repo, qual.SemanticId, "semanticId:", "Create data element!",
                         v =>
                         {
-                            qual.SemanticId = new Aas.Reference(Aas.ReferenceTypes.ExternalReference, new List<Aas.IKey>());
+                            qual.SemanticId = ExtendReference.CreateFromKey(KeyTypes.GlobalReference, value: "");
                             this.AddDiaryEntry(relatedReferable, new DiaryEntryStructChange());
                             return new AnyUiLambdaActionRedrawEntity();
                         }))
                 {
                     AddKeyReference(
-                        substack, "semanticId", qual.SemanticId, repo,
+                        substack, "semanticId", 
+                        qual.SemanticId, () => qual.SemanticId = null,
+                        repo,
                         packages, PackageCentral.PackageCentral.Selector.MainAuxFileRepo,
                         addExistingEntities: "All",
                         addEclassIrdi: true, addFromKnown: true,
@@ -389,6 +410,15 @@ namespace AasxPackageLogic
                 }
 
                 // Type
+                AddHintBubble(
+                    substack, hintMode,
+                    new[] {
+                        new HintCheck(
+                            () => {
+                                return (qual.Type == null || qual.Type.Trim() == "");
+                            },
+                            "Type string specification shall be given!")
+                    });
 
                 AddKeyValueExRef(
                     substack, "type", qual, qual.Type, null, repo,
@@ -458,7 +488,9 @@ namespace AasxPackageLogic
                             return new AnyUiLambdaActionRedrawEntity();
                         }))
                 {
-                    AddKeyReference(substack, "valueId", qual.ValueId, repo,
+                    AddKeyReference(substack, "valueId", 
+                        qual.ValueId, () => qual.ValueId = null,
+                        repo,
                         packages, PackageCentral.PackageCentral.Selector.MainAuxFileRepo,
                         addExistingEntities: "All", addFromKnown: true,
                         showRefSemId: false,
@@ -543,7 +575,9 @@ namespace AasxPackageLogic
                     }))
             {
                 AddKeyReference(
-                    substack, "semanticId", pair.SemanticId, repo,
+                    substack, "semanticId", 
+                    pair.SemanticId, () => pair.SemanticId = null,
+                    repo,
                     packages, PackageCentral.PackageCentral.Selector.MainAuxFileRepo,
                     addExistingEntities: "All",
                     addEclassIrdi: true, showRefSemId: false,
@@ -588,7 +622,9 @@ namespace AasxPackageLogic
                         return new AnyUiLambdaActionRedrawEntity();
                     }))
             {
-                AddKeyReference(substack, "externalSubjectId", pair.ExternalSubjectId, repo,
+                AddKeyReference(substack, "externalSubjectId", 
+                    pair.ExternalSubjectId, () => pair.ExternalSubjectId = null,
+                    repo,
                     packages, PackageCentral.PackageCentral.Selector.MainAuxFileRepo,
                     addExistingEntities: "All", addFromKnown: true, showRefSemId: false,
                     relatedReferable: relatedReferable);
@@ -815,7 +851,8 @@ namespace AasxPackageLogic
             AnyUiStackPanel stack, ModifyRepo repo,
             List<Aas.IExtension> extensions,
             Action<List<Aas.IExtension>> setOutput,
-            Aas.IReferable relatedReferable = null)
+            Aas.IReferable relatedReferable = null,
+            AasxMenu superMenu = null)
         {
             // access
             if (extensions == null)
@@ -824,12 +861,32 @@ namespace AasxPackageLogic
             // header
             if (editMode)
             {
+                // some hints
+                this.AddHintBubble(
+                stack, hintMode,
+                new[] {
+                    new HintCheck(
+                        () => extensions?.IsValid() != true,
+                        "According to the specification, an existing list of elements shall contain " +
+                        "at least one element and for each element all mandatory fields shall be " +
+                        "not empty.")
+                });
+
                 // let the user control the number of elements
                 AddActionPanel(
                     stack, "Extension entities:",
-                    new[] { "Add blank", "Add preset", "Add from clipboard", "Delete last" },
-                    repo,
-                    (buttonNdx) =>
+                    repo: repo,
+                    superMenu: superMenu,
+                    ticketMenu: new AasxMenu()
+                        .AddAction("extension-blank", "Add blank",
+                            "Adds an empty extension.")
+                        .AddAction("extension-preset", "Add preset",
+                            "Adds an extension given from the list of presets.")
+                        .AddAction("extension-clipboard", "Add from clipboard",
+                            "Adds an extension from parsed clipboard data (JSON).")
+                        .AddAction("extension-del", "Delete last",
+                            "Deletes last extension in the list."),
+                    ticketAction: (buttonNdx, ticket) =>
                     {
                         if (buttonNdx == 0)
                         {
@@ -850,7 +907,13 @@ namespace AasxPackageLogic
                             {
                                 // read file contents
                                 var init = System.IO.File.ReadAllText(pfn);
-                                var presets = JsonConvert.DeserializeObject<List<ExtensionPreset>>(init);
+                                
+                                // TODO (MIHO, 2024-01-024): refactor this                                
+                                JsonTextReader reader = new JsonTextReader(new StringReader(init));
+                                JsonSerializer serializer = new JsonSerializer();
+                                serializer.Converters.Add(new AdminShellConverters.AdaptiveAasIClassConverter(
+                                    AdminShellConverters.AdaptiveAasIClassConverter.ConversionMode.AasCore));
+                                var presets = serializer.Deserialize<List<ExtensionPreset>>(reader);
 
                                 // define dialogue and map presets into dialogue items
                                 var uc = new AnyUiDialogueDataSelectFromList();
@@ -929,6 +992,11 @@ namespace AasxPackageLogic
                             {
                                 case 0:
                                     extensions.Remove(extension);
+                                    if (extensions.Count < 1)
+                                    {
+                                        extensions = null;
+                                        setOutput?.Invoke(null);
+                                    }
                                     action = true;
                                     break;
                                 case 1:
@@ -979,9 +1047,20 @@ namespace AasxPackageLogic
                     margin: new AnyUiThickness(2, 2, 2, 2),
                     padding: new AnyUiThickness(5, 0, 5, 0));
 
-                AddHintBubble(
-                    substack, hintMode,
-                    new[] {
+                // special case: SAMM extension
+                // TODO: enable
+                if (false && Samm.Util.HasSammSemanticId(extension))
+                {
+                    substack.Add(new AnyUiLabel()
+                    {
+                        Content = "(special extension; see below)"
+                    });
+                }
+                else
+                {
+                    AddHintBubble(
+                        substack, hintMode,
+                        new[] {
                         new HintCheck(
                             () => !extension.Name.HasContent(),
                             "A name specification shall be given and unique within this list!")
@@ -995,155 +1074,156 @@ namespace AasxPackageLogic
                         return new AnyUiLambdaActionNone();
                     });
 
-                AddHintBubble(
-                    substack, hintMode,
-                    new[] {
+                    AddHintBubble(
+                        substack, hintMode,
+                        new[] {
                         new HintCheck(
                             () => extension.SemanticId?.IsValid() != true,
                             "Check, if a semanticId can be given in addition the key!",
                             severityLevel: HintCheck.Severity.Notice)
-                    });
-                if (SafeguardAccess(
-                        substack, repo, extension.SemanticId, "semanticId:", "Create data element!",
-                        v =>
-                        {
-                            extension.SemanticId = new Aas.Reference(Aas.ReferenceTypes.ExternalReference, new List<Aas.IKey>());
-                            this.AddDiaryEntry(relatedReferable, new DiaryEntryStructChange());
-                            return new AnyUiLambdaActionRedrawEntity();
-                        }))
-                {
-                    AddVerticalSpace(substack);
-                    AddKeyReference(
-                        substack, "semanticId", extension.SemanticId, repo,
-                        packages, PackageCentral.PackageCentral.Selector.MainAux,
-                        showRefSemId: false,
-                        addExistingEntities: "All", addFromKnown: true,
-                        addEclassIrdi: true,
-                        relatedReferable: relatedReferable,
-                        auxContextHeader: new[] { "\u2573", "Delete semanticId" },
-                        auxContextLambda: (i) =>
-                        {
-                            if (i == 0)
+                        });
+                    if (SafeguardAccess(
+                            substack, repo, extension.SemanticId, "semanticId:", "Create data element!",
+                            v =>
                             {
-                                extension.SemanticId = null;
+                                extension.SemanticId = new Aas.Reference(Aas.ReferenceTypes.ExternalReference, new List<Aas.IKey>());
                                 this.AddDiaryEntry(relatedReferable, new DiaryEntryStructChange());
                                 return new AnyUiLambdaActionRedrawEntity();
+                            }))
+                    {
+                        AddVerticalSpace(substack);
+                        AddKeyReference(
+                            substack, "semanticId", 
+                            extension.SemanticId, () => extension.SemanticId = null,
+                            repo,
+                            packages, PackageCentral.PackageCentral.Selector.MainAux,
+                            showRefSemId: false,
+                            addExistingEntities: "All", addFromKnown: true,
+                            addEclassIrdi: true,
+                            relatedReferable: relatedReferable,
+                            auxContextHeader: new[] { "\u2573", "Delete semanticId" },
+                            auxContextLambda: (i) =>
+                            {
+                                if (i == 0)
+                                {
+                                    extension.SemanticId = null;
+                                    this.AddDiaryEntry(relatedReferable, new DiaryEntryStructChange());
+                                    return new AnyUiLambdaActionRedrawEntity();
+                                }
+                                return new AnyUiLambdaActionNone();
+                            });
+                        AddVerticalSpace(substack);
+                    }
+
+                    AddKeyValueExRef(
+                        substack, "valueType", extension, Aas.Stringification.ToString(extension.ValueType), null, repo,
+                        comboBoxIsEditable: editMode,
+                        //comboBoxItems: DataElement.ValueTypeItems,
+                        //TODO (jtikekar, 0000-00-00): change
+                        comboBoxItems: ExtendStringification.DataTypeXsdToStringArray().ToArray(),
+                        comboBoxMinWidth: 190,
+                        setValue: v =>
+                        {
+                            var vt = Aas.Stringification.DataTypeDefXsdFromString((string)v);
+                            if (vt.HasValue)
+                                extension.ValueType = vt.Value;
+                            this.AddDiaryEntry(relatedReferable, new DiaryEntryStructChange());
+                            return new AnyUiLambdaActionNone();
+                        });
+
+                    AddKeyValueExRef(
+                        substack, "value", extension, extension.Value, null, repo,
+                        v =>
+                        {
+                            extension.Value = v as string;
+                            this.AddDiaryEntry(relatedReferable, new DiaryEntryStructChange());
+                            return new AnyUiLambdaActionNone();
+                        },
+                        limitToOneRowForNoEdit: true,
+                        auxButtonTitles: new[] { "\u2261" },
+                        auxButtonToolTips: new[] { "Edit in multiline editor" },
+                        auxButtonLambda: (buttonNdx) =>
+                        {
+                            if (buttonNdx == 0)
+                            {
+                                var uc = new AnyUiDialogueDataTextEditor(
+                                                    caption: $"Edit Extension '{"" + extension.Name}'",
+                                                    mimeType: Aas.Stringification.ToString(extension.ValueType),
+                                                    text: extension.Value);
+                                if (this.context.StartFlyoverModal(uc))
+                                {
+                                    extension.Value = uc.Text;
+                                    this.AddDiaryEntry(relatedReferable, new DiaryEntryUpdateValue());
+                                    return new AnyUiLambdaActionRedrawEntity();
+                                }
                             }
                             return new AnyUiLambdaActionNone();
                         });
-                    AddVerticalSpace(substack);
-                }
 
-
-                AddKeyValueExRef(
-                    substack, "valueType", extension, Aas.Stringification.ToString(extension.ValueType), null, repo,
-                    comboBoxIsEditable: editMode,
-                    //comboBoxItems: DataElement.ValueTypeItems,
-                    //TODO (jtikekar, 0000-00-00): change
-                    comboBoxItems: ExtendStringification.DataTypeXsdToStringArray().ToArray(),
-                    comboBoxMinWidth: 190,
-                    // dead-csharp off
-                    //new string[] {
-                    //"anyURI", "base64Binary",
-                    //"boolean", "date", "dateTime",
-                    //"dateTimeStamp", "decimal", "integer", "long", "int", "short", "byte", "nonNegativeInteger",
-                    //"positiveInteger",
-                    //"unsignedLong", "unsignedInt", "unsignedShort", "unsignedByte",
-                    //"nonPositiveInteger", "negativeInteger",
-                    //"double", "duration",
-                    //"dayTimeDuration", "yearMonthDuration", "float", "hexBinary", "string", "langString", "time" },
-                    // dead-csharp on
-                    setValue: v =>
-                    {
-                        var vt = Aas.Stringification.DataTypeDefXsdFromString((string)v);
-                        if (vt.HasValue)
-                            extension.ValueType = vt.Value;
-                        this.AddDiaryEntry(relatedReferable, new DiaryEntryStructChange());
-                        return new AnyUiLambdaActionNone();
-                    });
-
-                AddKeyValueExRef(
-                    substack, "value", extension, extension.Value, null, repo,
-                    v =>
-                    {
-                        extension.Value = v as string;
-                        this.AddDiaryEntry(relatedReferable, new DiaryEntryStructChange());
-                        return new AnyUiLambdaActionNone();
-                    },
-                    limitToOneRowForNoEdit: true,
-                    auxButtonTitles: new[] { "\u2261" },
-                    auxButtonToolTips: new[] { "Edit in multiline editor" },
-                    auxButtonLambda: (buttonNdx) =>
-                    {
-                        if (buttonNdx == 0)
-                        {
-                            var uc = new AnyUiDialogueDataTextEditor(
-                                                caption: $"Edit Extension '{"" + extension.Name}'",
-                                                mimeType: Aas.Stringification.ToString(extension.ValueType),
-                                                text: extension.Value);
-                            if (this.context.StartFlyoverModal(uc))
+                    // refersTo are MULTIPLE ModelReference<IReferable>. That is: multiple x multiple keys!                
+                    if (this.SafeguardAccess(
+                            substack, this.repo, extension.RefersTo, "refersTo:", "Create data element!",
+                            v =>
                             {
-                                extension.Value = uc.Text;
-                                this.AddDiaryEntry(relatedReferable, new DiaryEntryUpdateValue());
-                                return new AnyUiLambdaActionRedrawEntity();
-                            }
-                        }
-                        return new AnyUiLambdaActionNone();
-                    });
-
-                // refersTo are MULTIPLE ModelReference<IReferable>. That is: multiple x multiple keys!                
-                if (this.SafeguardAccess(
-                        substack, this.repo, extension.RefersTo, "refersTo:", "Create data element!",
-                        v =>
-                        {
-                            extension.RefersTo = new List<IReference>() { new Aas.Reference(Aas.ReferenceTypes.ModelReference, new List<Aas.IKey>()) };
-                            this.AddDiaryEntry(relatedReferable, new DiaryEntryStructChange());
-                            return new AnyUiLambdaActionRedrawEntity();
-                        }))
-                {
-                    if (editMode)
-                    {
-                        // let the user control the number of references
-                        this.AddActionPanel(
-                            substack, "refersTo:",
-                            new[] { "Add Reference", "Delete last reference" }, repo,
-                            (buttonNdx) =>
-                            {
-                                if (buttonNdx == 0)
-                                {
-                                    if (extension.RefersTo == null)
-                                        extension.RefersTo = new List<IReference>();
-                                    extension.RefersTo.Add(new Aas.Reference(Aas.ReferenceTypes.ModelReference, new List<Aas.IKey>()));
-                                }
-
-                                if (buttonNdx == 1 && extension.RefersTo != null)
-                                {
-                                    if (extension.RefersTo.Count > 0)
-                                        extension.RefersTo.Remove(extension.RefersTo.Last());
-                                    else
-                                        extension.RefersTo = null;
-                                }
-
+                                extension.RefersTo = new List<IReference>() { 
+                                    Options.Curr.GetDefaultEmptyReference(), 
+                                };
                                 this.AddDiaryEntry(relatedReferable, new DiaryEntryStructChange());
                                 return new AnyUiLambdaActionRedrawEntity();
-                            });
-                    }
-
-                    // now use the normal mechanism to deal with editMode or not..
-                    if (extension.RefersTo != null && extension.RefersTo != null)
+                            }))
                     {
-                        for (int ki = 0; ki < extension.RefersTo.Count; ki++)
-                            if (extension.RefersTo[ki] != null)
-                                this.AddKeyReference(
-                                    substack, String.Format("refersTo[{0}]", ki),
-                                    extension.RefersTo[ki],
-                                    repo, packages, PackageCentral.PackageCentral.Selector.MainAux,
-                                    addExistingEntities: "All", addFromKnown: true,
-                                    addEclassIrdi: true,
-                                    showRefSemId: false);
+                        if (editMode)
+                        {
+                            // let the user control the number of references
+                            this.AddActionPanel(
+                                substack, "refersTo:",
+                                new[] { "Add Reference", "Delete last reference" }, repo,
+                                (buttonNdx) =>
+                                {
+                                    if (buttonNdx == 0)
+                                    {
+                                        if (extension.RefersTo == null)
+                                            extension.RefersTo = new List<IReference>();
+                                        extension.RefersTo.Add(Options.Curr.GetDefaultEmptyReference());
+                                    }
+
+                                    if (buttonNdx == 1 && extension.RefersTo != null)
+                                    {
+                                        if (extension.RefersTo.Count > 0)
+                                            extension.RefersTo.Remove(extension.RefersTo.Last());
+                                        else
+                                            extension.RefersTo = null;
+                                    }
+
+                                    this.AddDiaryEntry(relatedReferable, new DiaryEntryStructChange());
+                                    return new AnyUiLambdaActionRedrawEntity();
+                                });
+                        }
+
+                        // now use the normal mechanism to deal with editMode or not..
+                        if (extension.RefersTo != null && extension.RefersTo != null)
+                        {
+                            for (int ki = 0; ki < extension.RefersTo.Count; ki++)
+                                if (extension.RefersTo[ki] != null)
+                                {
+                                    var localKi = ki;
+                                    this.AddKeyReference(
+                                        substack, String.Format("refersTo[{0}]", ki),
+                                        extension.RefersTo[ki],
+                                        () =>
+                                        {
+                                            extension.RefersTo.RemoveAt(localKi);
+                                            if (extension.RefersTo.Count < 1)
+                                                extension.RefersTo = null;
+                                        },
+                                        repo, packages, PackageCentral.PackageCentral.Selector.MainAux,
+                                        addExistingEntities: "All", addFromKnown: true,
+                                        addEclassIrdi: true,
+                                        showRefSemId: false);
+                                }
+                        }
                     }
                 }
-
             }
 
         }
@@ -1155,10 +1235,12 @@ namespace AasxPackageLogic
         public void AddKeyReference(
             AnyUiStackPanel view, string key,
             Aas.IReference refkeys,
+            Action setReferenceNull = null,
             ModifyRepo repo = null,
             PackageCentral.PackageCentral packages = null,
             PackageCentral.PackageCentral.Selector selector = PackageCentral.PackageCentral.Selector.Main,
             string addExistingEntities = null,
+            Func<Aas.IReference, Aas.IReference> modifyAddExistingKey = null,
             bool addEclassIrdi = false,
             bool addFromKnown = false,
             string[] addPresetNames = null, List<Aas.IKey>[] addPresetKeyLists = null,
@@ -1175,6 +1257,17 @@ namespace AasxPackageLogic
             // default
             if (emitCustomEvent == null)
                 emitCustomEvent = (rf) => { this.AddDiaryEntry(rf, new DiaryEntryStructChange()); };
+
+            // some hints
+            this.AddHintBubble(
+                view, hintMode,
+                new[] {
+                    new HintCheck(
+                        () => refkeys != null && refkeys.IsValid() != true,
+                        "According to the specification, an existing list of elements shall contain " +
+                        "at least one element and for each element all mandatory fields shall be " +
+                        "not empty.")
+                });
 
             //
             // extended Front panel
@@ -1258,7 +1351,9 @@ namespace AasxPackageLogic
                 {
                     // careful! Full recursion of edit function
                     AddKeyReference(
-                        footerPanel, "referredSem.Id", refkeys.ReferredSemanticId, repo,
+                        footerPanel, "referredSem.Id", 
+                        refkeys.ReferredSemanticId, () => refkeys.ReferredSemanticId = null,
+                        repo,
                         packages, PackageCentral.PackageCentral.Selector.Main, addExistingEntities: "All",
                         showRefSemId: false,
                         addEclassIrdi: true,
@@ -1283,8 +1378,11 @@ namespace AasxPackageLogic
             //
 
             AddKeyListKeys(
-                view, key, refkeys.Keys, repo, packages, selector,
-                addExistingEntities, addEclassIrdi, addFromKnown, addPresetNames, addPresetKeyLists,
+                view, key, refkeys.Keys, 
+                setReferenceNull,
+                repo, packages, selector,
+                addExistingEntities, modifyAddExistingKey,
+                addEclassIrdi, addFromKnown, addPresetNames, addPresetKeyLists,
                 jumpLambda, takeOverLambdaAction, noEditJumpLambda,
                 relatedReferable,
                 frontPanel: frontPanel,
@@ -1325,6 +1423,46 @@ namespace AasxPackageLogic
             return false;
         }
 
+        private IEnumerable<Aas.IValueReferencePair> PasteValueReferencePairsTextToList(string jsonInput)
+        {
+            var res = new List<Aas.IValueReferencePair>();
+            if (jsonInput == null)
+                return res;
+            jsonInput = jsonInput.Trim();
+
+            // text or json
+            if (!jsonInput.StartsWith('['))
+            {
+                // text based; multiple lines
+                var lines = jsonInput.Split(new string[] { System.Environment.NewLine },
+                    StringSplitOptions.RemoveEmptyEntries);
+                foreach (var ln in lines)
+                {
+                    var pairs = ln.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                    if (pairs.Length < 2)
+                        continue;
+                    res.Add(new Aas.ValueReferencePair(
+                        value: pairs[0],
+                        new Aas.Reference(ReferenceTypes.ExternalReference,
+                            (new Aas.IKey[] { new Aas.Key(KeyTypes.GlobalReference, pairs[1]) }).ToList())
+                        ));
+                }
+            }
+            else
+            {
+                // special read
+                JsonTextReader reader = new JsonTextReader(new StringReader(jsonInput));
+                JsonSerializer serializer = new JsonSerializer();
+                serializer.Converters.Add(new AdminShellConverters.AdaptiveAasIClassConverter(
+                    AdminShellConverters.AdaptiveAasIClassConverter.ConversionMode.AasCore));
+                res = serializer.Deserialize<List<Aas.ValueReferencePair>>(reader)
+                    .Cast<Aas.IValueReferencePair>().ToList();
+            }
+
+            // okay?
+            return res.AsEnumerable();
+        }
+
 
         public void ValueListHelper(
             Aas.Environment env,
@@ -1338,7 +1476,7 @@ namespace AasxPackageLogic
                 // let the user control the number of pairs
                 AddActionPanel(
                     stack, $"{key}:",
-                    new[] { "Add blank", "Add from clipboard", "Delete last" },
+                    new[] { "Add blank", "Add from clipboard", "Add multiple from clipboard", "Delete last" },
                     repo,
                     (buttonNdx) =>
                     {
@@ -1370,7 +1508,24 @@ namespace AasxPackageLogic
                             }
                         }
 
-                        if (buttonNdx == 2 && valuePairs.Count > 0)
+                        if (buttonNdx == 2)
+                        {
+                            try
+                            {
+                                var pNew = PasteValueReferencePairsTextToList(this.context?.ClipboardGet()?.Text);
+                                if (pNew != null && pNew.Count() > 0)
+                                {
+                                    valuePairs.AddRange(pNew);
+                                    this.AddDiaryEntry(relatedReferable, new DiaryEntryStructChange());
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Log.Singleton.Error(ex, "while accessing ValueReferencePair data in clipboard");
+                            }
+                        }
+
+                        if (buttonNdx == 3 && valuePairs.Count > 0)
                             valuePairs.RemoveAt(valuePairs.Count - 1);
 
                         return new AnyUiLambdaActionRedrawEntity();
@@ -1530,7 +1685,9 @@ namespace AasxPackageLogic
                             return new AnyUiLambdaActionRedrawEntity();
                         }))
                 {
-                    AddKeyReference(substack, "valueId", vp.ValueId, repo,
+                    AddKeyReference(substack, "valueId", 
+                        vp.ValueId, () => vp.ValueId = null,
+                        repo,
                         packages, PackageCentral.PackageCentral.Selector.MainAuxFileRepo,
                         addExistingEntities: Aas.Stringification.ToString(Aas.KeyTypes.ConceptDescription),
                         addFromKnown: true, showRefSemId: false,
@@ -1540,21 +1697,153 @@ namespace AasxPackageLogic
         }
 
         /// <summary>
-        /// Provides a menu to add a new SubmodelElement to a list of these.
+        /// Item of the organized relations expressed by SMT or SAMM concepts
         /// </summary>
-        public void DispSmeListAddNewHelper<T>(
+        public class ConceptOrganizedChildItem
+        {
+            public Aas.IConceptDescription Cd;
+            public AasSmtQualifiers.SmtCardinality Card = AasSmtQualifiers.SmtCardinality.One;
+            public bool SmlNoOrderRelevant = false;
+			public SmtAttributeRecord SmtRec;
+        }
+
+        /// <summary>
+        /// Information for the <c>Tag</c> of the data grid for new SMT guided elements
+        /// </summary>
+        protected class DispSmeListAddNewSmtItemRecord
+        {
+            public Aas.IConceptDescription Cd;
+            public SmtAttributeRecord SmtRec;
+            public Samm.ModelElement SammMe;
+            public AasSubmodelElements? Sme;
+        }
+
+		protected static List<AnyUiDialogueDataGridRow> DispSmeListAddNewCheckForSmtItems(
+            PackageCentral.PackageCentral packages,
+			Aas.IReference basedOnSemanticId)
+        {
+            // access 
+            var res = new List<AnyUiDialogueDataGridRow>();
+            if (packages == null
+                || basedOnSemanticId?.IsValid() != true
+                || basedOnSemanticId.Count() != 1)
+                return res;
+
+            // check all ConceptDescriptions for the semanticId
+            var cdId = basedOnSemanticId.Keys[0].Value;
+            var candidates = new List<ConceptOrganizedChildItem>();
+            foreach (var rftup in packages.QuickLookupAllIdent(cdId))
+                if (rftup?.Item2 is Aas.ConceptDescription cd)
+                {
+                    // SMT extension
+                    foreach (var smtRec in DispEditHelperExtensions
+                        .CheckReferableForExtensionRecords<SmtAttributeRecord>(cd))
+                    {    
+                        foreach (var item in SmtAttributeRecord.FindChildElementsForConcept(packages, cd, smtRec))
+                            candidates.Add(item);
+                    }
+                    
+                    // SAMM extension
+                    foreach (var me in DispEditHelperSammModules.CheckReferableForSammElements(cd))
+                    {
+                        foreach (var item in SammTransformation.FindChildElementsForConcept(packages, cd, me))
+                            candidates.Add(item);
+                    }
+                }
+
+            // check candidates further
+            foreach (var cand in candidates)
+            {
+                // access
+                if (cand.Cd == null || cand.SmtRec == null)
+                    continue;                
+
+				// Submodel
+				if (cand.SmtRec.IsSubmodel)
+                {
+                    // basically makes no sense
+                    res.Add(new AnyUiDialogueDataGridRow()
+                    {
+                        // Text = $"{cd.IdShort} (Submodel) {cd.Id}",
+                        Cells = (new[] { "-", SmtAttributeRecord.CardinalityShort(cand.Card), "SM", 
+                            cand.Cd.IdShort, cand.Cd.Id }).ToList(),
+                        Tag = new DispSmeListAddNewSmtItemRecord()
+                        {
+                            Cd = cand.Cd,
+                            SmtRec = cand.SmtRec,
+                            Sme = null
+                        }
+					});
+                }
+                else
+                {
+                    if (cand.SmtRec.SubmodelElements != null)
+                        foreach (var smet in cand.SmtRec.SubmodelElements)
+						    res.Add(new AnyUiDialogueDataGridRow()
+						    {
+							    // Text = $"{cd.IdShort} ({smet.ToString()}) {cd.Id}",
+								Cells = (new[] { "-", SmtAttributeRecord.CardinalityShort(cand.Card), 
+                                    ExtendISubmodelElement.ToString(smet), 
+                                    cand.Cd.IdShort, cand.Cd.Id }).ToList(),
+								Tag = new DispSmeListAddNewSmtItemRecord()
+								{
+									Cd = cand.Cd,
+									SmtRec = cand.SmtRec,
+									Sme = smet
+								}
+							});
+				}
+            }
+
+            // ok
+            return res;
+		}
+
+        protected void DispSmeListAddNewDetailOnItems<T>(
+            List<T> smeList,
+            List<AnyUiDialogueDataGridRow> items) where T : class, ISubmodelElement
+		{
+            // access
+            if (smeList == null || items == null)
+                return;
+
+            // for all items
+            foreach (var item in items)
+            {
+                // access
+                if (!(item.Tag is DispSmeListAddNewSmtItemRecord itrec)
+                    || itrec.Cd?.Id == null)
+                    continue;
+
+                // search for sme's having the specific semantic id
+                var cnt = smeList.Where((sme) => (sme?.SemanticId?
+                            .Matches(KeyTypes.GlobalReference, itrec.Cd.Id, MatchMode.Relaxed) == true)).Count();
+                if (cnt > 0)
+                    // make sense to rework
+                    item.Cells[0] = "" + cnt;
+            }
+        }
+
+		/// <summary>
+		/// Provides a menu to add a new SubmodelElement to a list of these.
+		/// </summary>
+		public void DispSmeListAddNewHelper<T>(
             Aas.Environment env,
             AnyUiStackPanel stack, ModifyRepo repo, string key,
             List<T> smeList,
             Action<List<T>> setValueLambda = null,
-            AasxMenu superMenu = null) where T : ISubmodelElement
+            AasxMenu superMenu = null,
+            Aas.IReference basedOnSemanticId = null) where T : class, ISubmodelElement
         {
             // access
             if (stack == null)
                 return;
 
-            // hint
-            this.AddHintBubble(stack, hintMode, new[] {
+            // gather potential SMT element items
+            var smtElemItem = DispSmeListAddNewCheckForSmtItems(packages, basedOnSemanticId);
+
+			// hint
+			this.AddHintBubble(stack, hintMode, new[] {
                     new HintCheck(
                         () => { return smeList == null || smeList.Count < 1; },
                         "This element currently has no SubmodelElements, yet. " +
@@ -1585,11 +1874,17 @@ namespace AasxPackageLogic
                         args: new AasxMenuListOfArgDefs()
                             .Add("Kind", "Name (not abbreviated) of kind of SubmodelElement."));
 
+            if (smtElemItem.Count > 0)
+            {
+				menu.AddAction("add-smt-guided", "Add SMT guided ..",
+				    "Adds a element based on SMT organized elements given by semanticId.");
+			}
+
             this.AddActionPanel(
                 stack, key,
                 repo: repo, superMenu: superMenu,
                 ticketMenu: menu,
-                ticketAction: (buttonNdx, ticket) =>
+                ticketActionAsync: async (buttonNdx, ticket) =>
                 {
                     if (buttonNdx >= 0 && buttonNdx <= 3)
                     {
@@ -1631,7 +1926,10 @@ namespace AasxPackageLogic
                                 smeList = new List<T>();
                                 setValueLambda?.Invoke(smeList);
                             }
+
+                            smeList = smeList ?? new List<T>();
                             smeList.Add(smw);
+                            setValueLambda(smeList);
 
                             // make some more adjustments
                             if (sme2 is IMultiLanguageProperty mlp)
@@ -1653,8 +1951,161 @@ namespace AasxPackageLogic
                             return new AnyUiLambdaActionRedrawAllElements(nextFocus: sme2, isExpanded: true);
                         }
                     }
+
+                    if (buttonNdx == 4)
+                    {
+                        // new SMT
+
+                        // rework list
+                        DispSmeListAddNewDetailOnItems(smeList, smtElemItem);
+
+						// show list
+						var uc = new AnyUiDialogueDataSelectFromDataGrid(
+                                    "Select element(s) to be created guided by SMT attributes ..",
+                                    maxWidth: 1400);
+                        
+                        uc.ColumnDefs = AnyUiListOfGridLength.Parse(new[] { "1*", "1*", "1*", "5*", "8*" });
+                        uc.ColumnHeaders = new[] { "Present", "Card.", "Type", "IdShort", "Id" };
+                        uc.Rows = smtElemItem;
+                        
+						await this.context.StartFlyoverModalAsync(uc);
+                        var itemsAdded = 0;
+                        ISubmodelElement lastSme = null;
+                        if (uc.ResultItems != null)
+                            foreach (var ucr in uc.ResultItems)
+                                if (ucr?.Tag is DispSmeListAddNewSmtItemRecord item)
+                                {
+                                    // create from SMT and do NOT allow Submodels here
+                                    if (item.SmtRec != null && item.Sme.HasValue && item.Cd != null)
+                                    {
+                                        // create a new SME
+                                        var sme = AdminShellUtil.CreateSubmodelElementFromEnum(item.Sme.Value);
+                                        if (sme == null)
+                                        {
+                                            Log.Singleton.Error("Creating type provided by SMT attributes.");
+                                            return new AnyUiLambdaActionNone();
+                                        }
+
+                                        // populate by SMT attributes
+                                        item.SmtRec.PopulateReferable(sme, item.Cd);
+
+                                        // add & confirm
+                                        var smw = sme as T;
+                                        if (smw != null)
+                                        {
+                                            smeList = smeList ?? new List<T>();
+                                            smeList.Add(smw);
+                                            setValueLambda(smeList);
+
+                                            this.AddDiaryEntry(sme, new DiaryEntryStructChange(
+                                                StructuralChangeReason.Create));
+
+                                            // statistics
+                                            lastSme = sme;
+                                            itemsAdded++;
+                                        }
+                                    }
+                                }
+
+                        // finalize
+                        if (itemsAdded > 0)
+                            Log.Singleton.Info($"{itemsAdded} elements guided by SMT were added.");
+
+                        if (lastSme != null)
+							return new AnyUiLambdaActionRedrawAllElements(nextFocus: lastSme, isExpanded: true);
+					}
+
                     return new AnyUiLambdaActionNone();
                 });
+        }
+
+        public static Tuple<Aas.ISubmodel, Aas.IReference> DispEditHelperCreateSubmodelFromSmtSamm(
+            PackageCentral.PackageCentral packages,
+            Aas.IEnvironment env,
+            Aas.IConceptDescription rootCd,
+            bool createChilds)
+        {
+            // access
+            if (packages == null || env == null || rootCd == null)
+                return null;
+
+            // create a Submodel and link it to the first AAS
+            var submodel = new Aas.Submodel(
+                idShort: rootCd.IdShort,
+                id: "" + AdminShellUtil.GenerateIdAccordingTemplate(Options.Curr.TemplateIdSubmodelInstance),
+                administration: rootCd.Administration?.Copy(),
+                semanticId: rootCd.GetCdReference());
+            env.Submodels.Add(submodel);
+
+            var aas1 = env?.AssetAdministrationShells?.FirstOrDefault();
+            Aas.IReference smres = null;
+            if (aas1 != null)
+            {
+                smres = submodel.GetReference();
+                aas1.Submodels.Add(smres);
+            }
+
+            // lambda to recurse
+            int numAdded = 0;
+            int numErrors = 0;
+            Func<Aas.IConceptDescription, List<Aas.ISubmodelElement>> lambdaCreateSmes = null;
+            lambdaCreateSmes = (parentCd) =>
+            {
+                // start
+                var res = new List<Aas.ISubmodelElement>();
+                if (parentCd?.Id == null)
+                    return res;
+
+                // childs?
+                var childInfo = DispSmeListAddNewCheckForSmtItems(
+                    packages, basedOnSemanticId: parentCd.GetCdReference());
+
+                // try to create
+                foreach (var ci in childInfo)
+                {
+                    // get item?
+                    if (!(ci.Tag is DispSmeListAddNewSmtItemRecord item))
+                        continue;
+
+                    // create a new SME
+                    var sme = AdminShellUtil.CreateSubmodelElementFromEnum(item.Sme.Value);
+                    if (sme == null)
+                    {
+                        Log.Singleton.Error("Creating type provided by SMT attributes.");
+                        numErrors++;
+                        continue;
+                    }
+
+                    // populate by SMT attributes
+                    item.SmtRec.PopulateReferable(sme, item.Cd);
+
+                    // add
+                    res.Add(sme);
+                    numAdded++;
+
+                    // recurse
+                    if (createChilds)
+                    {
+                        var childs2 = lambdaCreateSmes(item.Cd);
+                        if (childs2 != null)
+                            foreach (var c2 in childs2)
+                                sme.Add(c2);
+                    }
+                }
+
+                // result
+                return res;
+            };
+
+            // into Submodel?
+            submodel.SubmodelElements = new List<ISubmodelElement>();
+            submodel.SubmodelElements.AddRange(lambdaCreateSmes(rootCd));
+
+            // info
+            Log.Singleton.Info($"Added {numAdded}. {numErrors} errors.");
+
+            // ok 
+            return new Tuple<ISubmodel, IReference>(submodel, smres);
         }
 
     }

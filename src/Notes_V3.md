@@ -1,6 +1,22 @@
 # Notes for migrating to V3.0
 This files holds notes for migrating Package Explorer sources to meta mode V3.0
 
+## Projects, currently unloaded
+
+These projects are not migrated or integrated, yet.
+These projects need to be UNLOADED (for Visual Studio), to get a compiling solution.
+
+* AasxCsharpLibrary.Tests
+* AasxDictionaryImport.Tests
+* AasxRestServerLibrary
+* AasxSchemaExport.Tests
+* AasxRestConsoleServer
+* AasxToolkit.Tests
+* AasxUaNetConsoleServer
+* AasxPackageExplorer.GuiTests
+* AasxPackageExplorer.Tests
+* BlazorUI
+
 ## Observations
 
 * AdminShellPackageSupplementaryFile is not IReferable anymore!!
@@ -208,7 +224,6 @@ if (reference.Keys == null || reference.Keys.Count == 0 || otherReference?.Keys 
 * how two handle 2++ Submodels with different versions?
   - same idShort?
 
-
 ## Feature Requests to AAS core
 
 * GetSelfDescription() per Element
@@ -287,7 +302,7 @@ These projects are not migrated or integrated, yet:
 * AasxCsharpLibrary.Tests
 * AasxDictionaryImport.Tests
 * AasxFileServerRestLibrary (already migrated) -> introduce Aas. NS
-* AasxOpenidClient
+* AasxOpenidClient ??
 * AasxRestServerLibrary <- to be replaced by AASX Server sources
 * AasxSchemaExport.Tests
 * AasxUaNetServer

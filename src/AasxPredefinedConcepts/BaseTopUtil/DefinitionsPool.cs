@@ -8,6 +8,7 @@ This source code may use other Open Source software components (see LICENSE.txt)
 */
 
 using AasxIntegrationBase;
+using AdminShellNS;
 using Extensions;
 using System.Collections.Generic;
 using Aas = AasCore.Aas3_0;
@@ -118,11 +119,14 @@ namespace AasxPredefinedConcepts
 
             thePool.IndexDefinitions(AasxPredefinedConcepts.IdtaContactInformationV10.Static);
 
+            thePool.IndexDefinitions(AasxPredefinedConcepts.IdtaProductChangeNotificationsV10.Static);
+
             thePool.IndexDefinitions(AasxPredefinedConcepts.IdtaHandoverDocumentationV12.Static);
 
             thePool.IndexDefinitions(AasxPredefinedConcepts.AasEvents.Static);
 
-            thePool.IndexDefinitions(AasxPredefinedConcepts.SmtAdditions.Static);
+			thePool.IndexDefinitions(AasxPredefinedConcepts.SmtAdditions.Static);
+            thePool.IndexDefinitions(AasxPredefinedConcepts.SmtGeneral.Static);
 
             thePool.IndexDefinitions(AasxPredefinedConcepts.ZveiTimeSeriesDataV10.Static);
         }
